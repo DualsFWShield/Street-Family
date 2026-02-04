@@ -457,6 +457,21 @@ class UIManager {
             this.saveSettings();
         });
 
+        // Double Click to Inline Edit
+        this.elements.tableBody.addEventListener('dblclick', (e) => {
+            const td = e.target.closest('td');
+            if (!td) return;
+
+            // Skip action column or cells without data-key
+            if (!td.dataset.key || !td.dataset.id) return;
+
+            const key = td.dataset.key;
+            // Prevent editing of virtual/complex columns if needed
+            if (key === 'pricingCheck' || key === 'status' || key === 'hasFiche') return;
+
+            this.app.handleInlineEdit(td);
+        });
+
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             this.elements.dropZone.addEventListener(eventName, (e) => {
                 e.preventDefault();
@@ -539,6 +554,8 @@ class UIManager {
             this.columnsDefs.forEach(col => {
                 if (visibility[col.key] !== false) {
                     const td = document.createElement('td');
+                    td.dataset.id = member.id; // Member ID
+                    td.dataset.key = col.key;  // Column Key
                     td.innerHTML = this.formatCell(member, col);
                     tr.appendChild(td);
                 }
@@ -840,6 +857,179 @@ class App {
         XLSX.utils.book_append_sheet(wb, ws, "Inscriptions");
         const date = new Date().toISOString().slice(0, 10);
         XLSX.writeFile(wb, `SF_Inscriptions_v2_${date}.xlsx`);
+    }
+
+    handleInlineEdit(td) {
+        const id = parseInt(td.dataset.id);
+        const key = td.dataset.key;
+        const member = this.dataManager.members.find(m => m.id === id);
+        if (!member) return;
+
+        let val = member[key];
+
+        // Handle special objects (Smart Money)
+        if (key === 'amountDue' || key === 'paid1' || key === 'paid2') {
+            if (member[key + 'Details']) val = member[key + 'Details'].raw;
+        }
+
+        const width = td.offsetWidth;
+
+        // Sanitize value for attribute
+        const safeVal = (val !== undefined && val !== null) ? String(val).replace(/"/g, '&quot;') : '';
+
+        // Preserve current text alignment if needed, but usually inherits
+        td.innerHTML = `<input type="text" class="inline-edit-input" value="${safeVal}">`;
+        const input = td.querySelector('input');
+        input.focus();
+
+        const save = () => {
+            const newVal = input.value;
+            const C = CONFIG.COLS;
+
+            // Map keys
+            const keyMap = {
+                'name': C.NAME,
+                'courses': C.COURSES,
+                'nbHours': C.NB_HOURS,
+                'reduction': C.REDUCTION,
+                'amountDue': C.AMOUNT_DUE,
+                'paymentType': C.PAYMENT_TYPE,
+                'paid1': C.PAID_1,
+                'date1': C.DATE_1,
+                'paid2': C.PAID_2,
+                'date2': C.DATE_2,
+                'telStudent': C.TEL_STUDENT,
+                'parentsName': C.PARENTS_NAME,
+                'telParents': C.TEL_PARENTS,
+                'mailStudent': C.MAIL_STUDENT,
+                'mailParents': C.MAIL_PARENTS,
+                'address': C.ADDRESS,
+                'cp': C.CP,
+                'city': C.CITY,
+                'dob': C.DOB,
+                'pob': C.POB,
+                'other': C.OTHER,
+                'sex': C.SEX
+            };
+
+            const colIdx = keyMap[key];
+
+            if (colIdx !== undefined) {
+                this.dataManager.rawData[id][colIdx] = newVal;
+                const newMember = this.dataManager.mapRowToMember(this.dataManager.rawData[id], id);
+                const memIdx = this.dataManager.members.findIndex(m => m.id === id);
+                this.dataManager.members[memIdx] = newMember;
+
+                this.dataManager.saveToStorage();
+                this.uiManager.renderTable(this.dataManager.members);
+                this.uiManager.updateStats(this.dataManager.getStats());
+            } else {
+                this.uiManager.renderTable(this.dataManager.members);
+            }
+        };
+
+        input.addEventListener('blur', save);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                input.blur();
+            }
+        });
+    }
+
+    handleInlineEdit(td) {
+        const id = parseInt(td.dataset.id);
+        const key = td.dataset.key;
+        const member = this.dataManager.members.find(m => m.id === id);
+        if (!member) return;
+
+        // Current Value
+        // Careful with raw vs formatted. Ideally we edit the raw value or a text representation.
+        // For simplicity, let's use the current text content, OR try to find the raw value if mapped.
+        // Actually, we have the member object. using member[key] might be processed.
+        // Let's look at DataManager.mapRowToMember. 
+        // Some fields like active/hasFiche have different keys than rawData indexes.
+
+        // Let's create an input with the current value
+        let val = member[key];
+
+        // Handle special objects (Smart Money)
+        if (key === 'amountDue' || key === 'paid1' || key === 'paid2') {
+            // For smart money, we might want to edit the Raw string to preserve formulas/comments
+            if (member[key + 'Details']) val = member[key + 'Details'].raw; // Edit the raw input
+        }
+
+        const width = td.offsetWidth;
+
+        td.innerHTML = `<input type="text" class="inline-edit-input" value="${val !== undefined ? val : ''}" style="width:${width}px">`;
+        const input = td.querySelector('input');
+        input.focus();
+
+        // Save on Blur or Enter
+        const save = () => {
+            const newVal = input.value;
+            // Update DataManager
+            // We need to map 'key' back to 'raw column index'
+            const C = CONFIG.COLS;
+            let colIdx = -1;
+
+            // Map keys to CONFIG.COLS
+            // Simplistic mapping based on key name matching CONFIG.COLS keys in UPPERCASE
+            // e.g. 'name' -> C.NAME
+            // 'amountDue' -> C.AMOUNT_DUE
+            // conversion helper:
+            const keyMap = {
+                'name': C.NAME,
+                'courses': C.COURSES,
+                'nbHours': C.NB_HOURS,
+                'reduction': C.REDUCTION,
+                'amountDue': C.AMOUNT_DUE,
+                'paymentType': C.PAYMENT_TYPE,
+                'paid1': C.PAID_1,
+                'date1': C.DATE_1,
+                'paid2': C.PAID_2,
+                'date2': C.DATE_2,
+                'telStudent': C.TEL_STUDENT,
+                'parentsName': C.PARENTS_NAME,
+                'telParents': C.TEL_PARENTS,
+                'mailStudent': C.MAIL_STUDENT,
+                'mailParents': C.MAIL_PARENTS,
+                'address': C.ADDRESS,
+                'cp': C.CP,
+                'city': C.CITY,
+                'dob': C.DOB,
+                'pob': C.POB,
+                'other': C.OTHER,
+                'sex': C.SEX
+            };
+
+            colIdx = keyMap[key];
+
+            if (colIdx !== undefined) {
+                // Update RAW data
+                this.dataManager.rawData[id][colIdx] = newVal;
+
+                // Re-process member to get derived fields updated
+                // We can either re-process ALL (safest) or just this one.
+                // Let's reprocess this one row
+                const newMember = this.dataManager.mapRowToMember(this.dataManager.rawData[id], id);
+                const memIdx = this.dataManager.members.findIndex(m => m.id === id);
+                this.dataManager.members[memIdx] = newMember;
+
+                this.dataManager.saveToStorage();
+                this.uiManager.renderTable(this.dataManager.members);
+                this.uiManager.updateStats(this.dataManager.getStats());
+            } else {
+                // Cancel if no mapping (e.g. virtual columns)
+                this.uiManager.renderTable(this.dataManager.members);
+            }
+        };
+
+        input.addEventListener('blur', save);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                input.blur(); // Triggers save
+            }
+        });
     }
 }
 
