@@ -16,6 +16,7 @@
     --success: #10b981;
     --warning: #f59e0b;
     --danger: #ef4444;
+    --info: #3b82f6;
 
     --border: #2d313a;
     --radius: 12px;
@@ -149,9 +150,11 @@ body {
 /* Content Area */
 .content-area {
     flex: 1;
-    overflow-y: auto;
+    overflow: hidden;
     padding: 2rem;
     position: relative;
+    display: flex;
+    flex-direction: column;
 }
 
 /* Drop Zone */
@@ -191,6 +194,7 @@ body {
     font-weight: 600;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 0.5rem;
     transition: var(--trans-fast);
     font-size: 0.9rem;
@@ -216,23 +220,54 @@ body {
     background: var(--border);
 }
 
+.btn-sm {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.8rem;
+}
+
 .hidden-input {
     display: none;
 }
 
+/* Top Scrollbar Logic - Removed */
+
 /* Table */
 .table-container {
     background: var(--bg-panel);
-    border-radius: var(--radius);
-    overflow: hidden;
-    overflow-x: auto;
-    /* Allow Horizontal Scroll */
+    border-bottom-left-radius: var(--radius);
+    border-bottom-right-radius: var(--radius);
+    overflow: auto;
+    /* Enable BOTH X and Y scrolling */
     border: 1px solid var(--border);
+    max-width: 100%;
+    flex: 1;
+    /* Take remaining space */
+
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) var(--bg-dark);
+}
+
+/* Hide horizontal scrollbar in Webkit */
+.table-container::-webkit-scrollbar {
+    width: 8px;
+    height: 10px;
+    /* Restored Horizontal Scrollbar */
+}
+
+.table-container::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-track {
+    background: var(--bg-dark);
 }
 
 .data-table {
     width: 100%;
     border-collapse: collapse;
+    white-space: nowrap;
+    /* Keep rows single line */
 }
 
 .data-table th,
@@ -249,8 +284,10 @@ body {
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    /* Sticky Header */
     position: sticky;
     top: 0;
+    z-index: 10;
 }
 
 .data-table tr:hover {
@@ -259,11 +296,10 @@ body {
 
 /* Status Indicators */
 .status-dot {
-    height: 8px;
-    width: 8px;
+    height: 10px;
+    width: 10px;
     border-radius: 50%;
     display: inline-block;
-    margin-right: 8px;
 }
 
 .status-active {
@@ -272,24 +308,38 @@ body {
 }
 
 .status-inactive {
-    background-color: var(--text-muted);
+    background-color: var(--border);
+}
+
+.badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
 }
 
 .status-paid {
     color: var(--success);
+    background: rgba(16, 185, 129, 0.1);
 }
 
 .status-unpaid {
     color: var(--danger);
+    background: rgba(239, 68, 68, 0.1);
 }
 
-.status-warning {
+.status-partial {
     color: var(--warning);
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.status-na {
+    color: var(--text-muted);
 }
 
 .row-inactive {
     opacity: 0.5;
-    background-color: #1f1f1f;
+    background-color: #1a1a1a;
 }
 
 /* Modal */
@@ -313,13 +363,19 @@ body {
 
 .modal-content {
     background: var(--bg-panel);
-    width: 500px;
+    width: 400px;
     max-width: 90%;
     border-radius: var(--radius);
     border: 1px solid var(--border);
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
+    max-height: 90vh;
+}
+
+.modal-large {
+    width: 800px;
+    /* Wider for more inputs */
 }
 
 .modal-header {
@@ -332,8 +388,9 @@ body {
 
 .modal-body {
     padding: 1.5rem;
-    max-height: 70vh;
     overflow-y: auto;
+    flex: 1;
+    /* Scrollable area */
 }
 
 .modal-footer {
@@ -344,6 +401,38 @@ body {
     gap: 1rem;
 }
 
+/* Form Styles */
+.form-section-title {
+    color: var(--primary);
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    margin-top: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+}
+
+.form-section-title:first-child {
+    margin-top: 0;
+}
+
+.grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1rem;
+}
+
+.span-2 {
+    grid-column: span 2;
+}
+
 .form-group {
     margin-bottom: 1rem;
 }
@@ -352,7 +441,7 @@ body {
     display: block;
     margin-bottom: 0.5rem;
     color: var(--text-muted);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
 
 .form-group input,
@@ -363,6 +452,88 @@ body {
     border: 1px solid var(--border);
     border-radius: 6px;
     color: white;
+    font-size: 0.95rem;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    border-color: var(--primary);
+    outline: none;
+}
+
+/* Custom Checkbox */
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.settings-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+}
+
+.checkbox-item {
+    padding: 0.5rem;
+    border-radius: 4px;
+}
+
+.checkbox-item:hover {
+    background: var(--bg-hover);
+}
+
+.custom-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.custom-checkbox input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--primary);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 10px;
+    /* Default for others */
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-dark);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
+/* Filter Dropdown Styling */
+.filter-group select {
+    width: 100%;
+    padding: 0.8rem;
+    background-color: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-main);
+    font-weight: 500;
+    cursor: pointer;
+    outline: none;
+    transition: var(--trans-fast);
+}
+
+.filter-group select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px var(--primary-glow);
 }
 
 /* Mobile Responsive */
@@ -373,10 +544,21 @@ body {
 
     .sidebar {
         display: none;
-        /* Can make a drawer later */
     }
 
     .search-wrapper {
         width: 100%;
+    }
+
+    .modal-large {
+        width: 100%;
+        height: 100%;
+        max-height: 100%;
+        border-radius: 0;
+    }
+
+    .grid-2,
+    .grid-3 {
+        grid-template-columns: 1fr;
     }
 }

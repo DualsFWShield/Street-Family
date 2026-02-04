@@ -48,15 +48,22 @@
                     <label>Statut Paiement</label>
                     <select id="filterPayment">
                         <option value="all">Tous</option>
-                        <option value="paid">Payé</option>
-                        <option value="unpaid">Non Payé</option>
+                        <option value="paid">Payés</option>
+                        <option value="partial">A moitié payés</option>
+                        <option value="unpaid">Non Payés</option>
+                        <option value="na">N/A</option>
                     </select>
                 </div>
-                <!-- More filters can be added here -->
             </nav>
 
             <div class="actions-area">
-                <button id="exportBtn" class="btn btn-primary">
+                <button id="settingsBtn" class="btn btn-secondary">
+                    <i class="fa-solid fa-table-columns"></i> Colonnes
+                </button>
+                <button id="tarifsBtn" class="btn btn-secondary" style="margin-top: 0.5rem;">
+                    <i class="fa-solid fa-tags"></i> Voir Tarifs
+                </button>
+                <button id="exportBtn" class="btn btn-primary" style="margin-top: 1rem;">
                     <i class="fa-solid fa-file-export"></i> Exporter Excel
                 </button>
             </div>
@@ -67,7 +74,7 @@
             <header class="top-bar">
                 <div class="search-wrapper">
                     <i class="fa-solid fa-magnifying-glass"></i>
-                    <input type="text" id="searchInput" placeholder="Rechercher un membre (Nom, Cours...)...">
+                    <input type="text" id="searchInput" placeholder="Rechercher (Nom, Cours)...">
                 </div>
                 <div class="file-status">
                     <input type="file" id="fileInput" accept=".xlsx, .xls" class="hidden-input">
@@ -92,13 +99,7 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>Statut</th>
-                                <th>Nom</th>
-                                <th>Cours</th>
-                                <th>Montant</th>
-                                <th>Paiement</th>
-                                <th>Contact</th>
-                                <th>Actions</th>
+                                <!-- Injected by JS -->
                             </tr>
                         </thead>
                         <tbody id="tableBody">
@@ -112,7 +113,7 @@
 
     <!-- Edit Modal -->
     <div id="editModal" class="modal hidden">
-        <div class="modal-content">
+        <div class="modal-content modal-large">
             <div class="modal-header">
                 <h2>Modifier Membre</h2>
                 <button class="close-modal"><i class="fa-solid fa-xmark"></i></button>
@@ -121,23 +122,40 @@
                 <form id="editForm">
                     <input type="hidden" id="editId">
 
-                    <div class="form-group">
-                        <label>Nom et Prénom</label>
-                        <input type="text" id="editName" required>
+                    <div class="form-section-title">Informations Générales</div>
+                    <div class="grid-2">
+                        <div class="form-group span-2">
+                            <label>Nom et Prénom</label>
+                            <input type="text" id="editName" required>
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <label for="editActive" style="margin-bottom:0">Fiche Rentrée</label>
+                            <input type="checkbox" id="editActive" style="width: 20px; height: 20px;">
+                        </div>
+                        <div class="form-group">
+                            <label>Sexe</label>
+                            <select id="editSex">
+                                <option value=""></option>
+                                <option value="F">F</option>
+                                <option value="M">M</option>
+                                <option value="X">X</option>
+                            </select>
+                        </div>
                     </div>
 
+                    <div class="form-section-title">Cours & Tarifs</div>
                     <div class="form-group">
                         <label>Cours</label>
                         <input type="text" id="editCourses">
                     </div>
-
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="grid-3">
                         <div class="form-group">
-                            <label>Type Paiement</label>
-                            <select id="editPaymentType">
-                                <option value="Par année">Par année</option>
-                                <option value="Par semestre">Par semestre</option>
-                            </select>
+                            <label>Nb Heures</label>
+                            <input type="text" id="editNbHours">
+                        </div>
+                        <div class="form-group">
+                            <label>Réduction</label>
+                            <input type="text" id="editReduction">
                         </div>
                         <div class="form-group">
                             <label>Total à Payer (€)</label>
@@ -145,32 +163,145 @@
                         </div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-section-title">Paiements</div>
+                    <div class="form-group">
+                        <label>Type Paiement</label>
+                        <select id="editPaymentType">
+                            <option value="Par année">Par année</option>
+                            <option value="Par semestre">Par semestre</option>
+                        </select>
+                    </div>
+                    <div class="grid-2">
                         <div class="form-group">
                             <label>Paiement 1 (€)</label>
-                            <input type="number" step="0.01" id="editAmountPaid1">
+                            <input type="number" step="0.01" id="editPaid1">
+                        </div>
+                        <div class="form-group">
+                            <label>En date du (1)</label>
+                            <input type="text" id="editDate1" placeholder="DD-MM-YYYY">
                         </div>
                         <div class="form-group">
                             <label>Paiement 2 (€)</label>
-                            <input type="number" step="0.01" id="editAmountPaid2">
+                            <input type="number" step="0.01" id="editPaid2">
+                        </div>
+                        <div class="form-group">
+                            <label>En date du (2)</label>
+                            <input type="text" id="editDate2" placeholder="DD-MM-YYYY">
                         </div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-section-title">Coordonnées</div>
+                    <div class="grid-2">
                         <div class="form-group">
-                            <label>Téléphone</label>
-                            <input type="text" id="editPhone">
+                            <label>Tél Élève</label>
+                            <input type="text" id="editTelStudent">
                         </div>
                         <div class="form-group">
-                            <label>Email</label>
-                            <input type="email" id="editEmail">
+                            <label>Tél Parents</label>
+                            <input type="text" id="editTelParents">
+                        </div>
+                        <div class="form-group">
+                            <label>Email Élève</label>
+                            <input type="text" id="editMailStudent">
+                        </div>
+                        <div class="form-group">
+                            <label>Email Parents</label>
+                            <input type="text" id="editMailParents">
+                        </div>
+                        <div class="form-group span-2">
+                            <label>Nom Responsable</label>
+                            <input type="text" id="editParentsName">
                         </div>
                     </div>
+
+                    <div class="form-section-title">Adresse & Divers</div>
+                    <div class="form-group">
+                        <label>Adresse</label>
+                        <input type="text" id="editAddress">
+                    </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label>CP</label>
+                            <input type="text" id="editCP">
+                        </div>
+                        <div class="form-group">
+                            <label>Ville</label>
+                            <input type="text" id="editCity">
+                        </div>
+                    </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label>Date Naissance</label>
+                            <input type="text" id="editDOB" placeholder="DD-MM-YYYY">
+                        </div>
+                        <div class="form-group">
+                            <label>Lieu Naissance</label>
+                            <input type="text" id="editPOB">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Autre (Santé etc)</label>
+                        <input type="text" id="editOther">
+                    </div>
+
                 </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary close-modal-btn">Annuler</button>
                 <button type="submit" form="editForm" class="btn btn-primary">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Affichage des Colonnes</h2>
+            </div>
+            <div class="modal-body">
+                <p style="color:var(--text-muted); margin-bottom:1rem;">Cochez les colonnes à afficher :</p>
+                <div id="settingsColumnsList" class="settings-list">
+                    <!-- Checkboxes injected by JS -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="saveSettingsBtn">Fermer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tarifs Modal -->
+    <div id="tarifsModal" class="modal hidden">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2>Grille des Tarifs</h2>
+                <button class="close-modal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div style="overflow-x:auto;">
+                    <table class="data-table" id="tarifsTable">
+                        <thead>
+                            <tr>
+                                <th>Heures</th>
+                                <th>Semestre</th>
+                                <th>Année</th>
+                                <th>-10% Sem</th>
+                                <th>-10% Année</th>
+                                <th>-15% Sem</th>
+                                <th>-15% Année</th>
+                                <th>Famille Sem</th>
+                                <th>Famille Année</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary close-modal-btn">Fermer</button>
             </div>
         </div>
     </div>
