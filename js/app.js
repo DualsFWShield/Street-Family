@@ -69,6 +69,9 @@ function parseSmartMoney(val) {
 
     if (val === undefined || val === null || val === '') return res;
 
+    // Handle slash as 0/Empty
+    if (val.toString().trim() === '/') return res;
+
     if (typeof val === 'number') {
         res.val = val;
         return res;
@@ -82,6 +85,15 @@ function parseSmartMoney(val) {
         return res;
     }
 
+    // Handle "Je dois..." type comments (no numbers or very complex)
+    // If it starts with non-digit and has no obvious math, treat as text
+    if (/^[a-zA-Z]/.test(str) && !/\d/.test(str)) {
+        res.text = str;
+        res.isComment = true;
+        return res;
+    }
+
+    // Explicit Math with "="
     if (str.includes('=')) {
         const parts = str.split('=');
         const resultStr = parts[parts.length - 1];
@@ -89,15 +101,28 @@ function parseSmartMoney(val) {
         return res;
     }
 
-    if (/^[\d\s€\.\,\+\-]+$/.test(str)) {
+    // Try Math Evaluation (Clean € and spaces)
+    if (/^[\d\s€\.\,\+\-\*\/\(\)]+$/.test(str)) {
         const eqn = str.replace(/,/g, '.').replace(/€/g, '');
         try {
-            res.val = Function('"use strict";return (' + eqn + ')')();
-            return res;
+            // Safety check: only allow digits and math operators
+            if (/^[\d\.\+\-\*\/\(\)\s]+$/.test(eqn)) {
+                res.val = Function('"use strict";return (' + eqn + ')')();
+                return res;
+            }
         } catch (e) { }
     }
 
     const nums = str.match(/(\d+[.,]?\d*)/g);
+
+    // Handle "90 en liquide" -> Extract 90
+    if (nums && nums.length === 1 && /[a-zA-Z]/.test(str)) {
+        res.val = parseFloat(nums[0].replace(',', '.'));
+        res.isComment = true; // Mark as having comment
+        return res;
+    }
+
+    // Handle Sum of multiple numbers in text
     if (nums && nums.length > 1 && /[a-zA-Z]/.test(str)) {
         let total = 0;
         nums.forEach(n => {
@@ -108,6 +133,7 @@ function parseSmartMoney(val) {
         return res;
     }
 
+    // Fallback text check
     if (/[a-zA-Z]/.test(str)) {
         res.text = str;
         res.isComment = true;
@@ -169,9 +195,81 @@ class DataManager {
         }
     }
 
+    // Phone Formatter
+    formatPhoneNumber(val) {
+        if (!val) return "";
+        let str = val.toString().trim();
+        if (str === "" || str === "/" || str === "-" || str === "@") return "";
+
+        // Clean .00 suffix typical in Excel imports
+        if (str.endsWith('.00')) str = str.substring(0, str.length - 3);
+
+        // Split multiple numbers
+        // Fix: Strings with newlines should split. Strings with spaces around / should split.
+        // \n, \r, " - ", " / ", " ou ", " et "
+        const parts = str.split(/[\n\r]|\s+\/\s+|\s+ou\s+|\s+et\s+|\s+-\s+| - /i);
+
+        const formatSingle = (raw) => {
+            let clean = raw.replace(/[^\d+]/g, '');
+
+            if (!clean) return "";
+
+            // 0032 -> +32
+            if (clean.startsWith('0032')) clean = '+32' + clean.substring(4);
+
+            // 32... (without +) -> +32... (only if length suggests it, 32 + 9 digits = 11 digits)
+            if (clean.startsWith('32') && clean.length === 11) clean = '+' + clean;
+
+            // 33... (France) -> +33...
+            if (clean.startsWith('33') && clean.length === 11) clean = '+' + clean;
+
+            // 04... -> +32 4...
+            if (clean.startsWith('0')) clean = '+32' + clean.substring(1);
+
+            // Case: "498728675" (missing leading 0, 9 digits starting with 4)
+            if (!clean.startsWith('+') && clean.length === 9 && clean.startsWith('4')) {
+                clean = '+32' + clean;
+            }
+
+            // Case: "4475..." (Mistyped 0475 as 4475? Or valid UK +44 75?)
+            // "4475 954362" (10 digits).
+            if (!clean.startsWith('+') && clean.length === 10 && clean.startsWith('447')) {
+                clean = '+32' + clean.substring(1); // Treat leading 4 as 0 -> +32 475...
+            }
+
+            if (clean.startsWith('+32')) {
+                let rest = clean.substring(3);
+                if (rest.length === 9) {
+                    return `+32 ${rest.substring(0, 3)} ${rest.substring(3, 5)} ${rest.substring(5, 7)} ${rest.substring(7, 9)}`;
+                }
+                if (rest.length === 8) {
+                    return `+32 ${rest.substring(0, 2)} ${rest.substring(2, 4)} ${rest.substring(4, 6)} ${rest.substring(6, 8)}`;
+                }
+            }
+
+            // French Format: +33 6 XX XX XX XX
+            if (clean.startsWith('+33')) {
+                let rest = clean.substring(3);
+                // Mobile/Standard is 9 digits after +33
+                if (rest.length === 9) {
+                    // +33 6 08 56 70 46
+                    return `+33 ${rest.substring(0, 1)} ${rest.substring(1, 3)} ${rest.substring(3, 5)} ${rest.substring(5, 7)} ${rest.substring(7, 9)}`;
+                }
+            }
+
+            return clean;
+        };
+
+        return parts.map(p => formatSingle(p)).filter(Boolean).join(' / ');
+    }
+
     mapRowToMember(row, index) {
         const C = CONFIG.COLS;
-        const getStr = (idx) => (row[idx] || "").toString().trim();
+        const getStr = (idx) => {
+            const val = (row[idx] || "").toString().trim();
+            if (val === '/' || val === '-') return '';
+            return val;
+        };
 
         // Parse Smart Money Fields
         const mAmountDue = parseSmartMoney(row[C.AMOUNT_DUE]);
@@ -212,9 +310,9 @@ class DataManager {
 
             date2: row[C.DATE_2],
 
-            telStudent: getStr(C.TEL_STUDENT),
+            telStudent: this.formatPhoneNumber(getStr(C.TEL_STUDENT)),
             parentsName: getStr(C.PARENTS_NAME),
-            telParents: getStr(C.TEL_PARENTS),
+            telParents: this.formatPhoneNumber(getStr(C.TEL_PARENTS)),
             mailStudent: getStr(C.MAIL_STUDENT),
             mailParents: getStr(C.MAIL_PARENTS),
             address: getStr(C.ADDRESS),
@@ -228,6 +326,7 @@ class DataManager {
         };
 
         member.amountPaid = this.calculateTotalPaid(member);
+        member.remaining = member.amountDue - member.amountPaid;
         member.status = this.calculateStatus(member);
         member.pricingCheck = this.verifyPrice(member);
 
@@ -236,8 +335,9 @@ class DataManager {
 
     calculateTotalPaid(member) {
         let validPaid = 0;
-        if (this.isValidDate(member.date1)) validPaid += member.paid1;
-        if (this.isValidDate(member.date2)) validPaid += member.paid2;
+        // Fix: Count payment even if date is missing (e.g. "90 en liquide" with empty date)
+        if (member.paid1) validPaid += member.paid1;
+        if (member.paid2) validPaid += member.paid2;
         return validPaid;
     }
 
@@ -255,6 +355,18 @@ class DataManager {
     verifyPrice(member) {
         if (member.amountDueDetails.text) return { status: 'unknown', msg: 'Prix texte' };
 
+        // Handle "Carte" Exception
+        const red = (member.reduction || "").toString().toLowerCase();
+        if (red.includes('carte')) {
+            const targetPrice = member.amountDue;
+            const paid = member.amountPaid;
+            const diff = paid - targetPrice;
+
+            if (Math.abs(diff) < 1) return { status: 'ok', diff: 0, target: targetPrice, msg: 'Carte' };
+            if (diff > 0) return { status: 'over', diff: diff, target: targetPrice, msg: `+${diff.toFixed(2)}€` };
+            return { status: 'under', diff: diff, target: targetPrice, msg: `${diff.toFixed(2)}€` };
+        }
+
         let hoursKey = member.nbHours;
         if (!isNaN(parseFloat(hoursKey))) hoursKey = parseFloat(hoursKey);
 
@@ -264,7 +376,7 @@ class DataManager {
         if (!row) return { status: 'unknown', diff: 0, target: 0, msg: 'Heures?' };
 
         const isSemestre = member.paymentType.toLowerCase().includes("semestre");
-        const red = member.reduction.toLowerCase();
+
         let colIndex = 2; // Default Standard Year
 
         if (red.includes("10") || red.includes("0.1")) {
@@ -421,8 +533,30 @@ class UIManager {
         this.elements.filterPayment.addEventListener('change', () => this.renderTable(this.app.currentData));
 
         this.elements.exportBtn.addEventListener('click', () => {
-            if (this.app.currentData.length > 0) this.app.exportData();
-            else Swal.fire('Info', 'Aucune donnée à exporter', 'warning');
+            if (this.app && this.app.currentData.length > 0) {
+                this.app.uiManager.openExportModal();
+            } else {
+                Swal.fire('Info', 'Aucune donnée à exporter', 'warning');
+            }
+        });
+
+        // Event Delegation for Table Actions (Click)
+        this.elements.tableBody.addEventListener('click', (e) => {
+            const btn = e.target.closest('button');
+            if (!btn) return;
+
+            const id = parseInt(btn.dataset.id);
+            if (isNaN(id)) return;
+
+            if (btn.classList.contains('action-reminder')) {
+                this.app.openReminder(id);
+            }
+            if (btn.classList.contains('action-edit')) {
+                this.app.openEdit(id);
+            }
+            if (btn.classList.contains('action-toggle')) {
+                this.app.toggleActive(id);
+            }
         });
 
         if (this.elements.settingsBtn) {
@@ -565,11 +699,14 @@ class UIManager {
             tdActions.style.whiteSpace = 'nowrap';
             // Switch toggles Active/Inactive status, NOT Fiche status
             tdActions.innerHTML = `
-                <button class="btn btn-secondary btn-sm" onclick="app.openEdit(${member.id})">
-                    <i class="fa-solid fa-pen"></i>
+                <button class="btn btn-secondary btn-sm action-reminder" data-id="${member.id}" title="Envoyer un rappel">
+                    <i class="fa-solid fa-comments-dollar pointer-events-none"></i>
                 </button>
-                <button class="btn btn-secondary btn-sm" onclick="app.toggleActive(${member.id})">
-                    <i class="fa-solid ${member.active ? 'fa-toggle-on' : 'fa-toggle-off'}"></i>
+                <button class="btn btn-secondary btn-sm action-edit" data-id="${member.id}" title="Éditer">
+                    <i class="fa-solid fa-pen pointer-events-none"></i>
+                </button>
+                <button class="btn btn-secondary btn-sm action-toggle" data-id="${member.id}" title="Activer/Désactiver">
+                    <i class="fa-solid ${member.active ? 'fa-toggle-on' : 'fa-toggle-off'} pointer-events-none"></i>
                 </button>
             `;
             tr.appendChild(tdActions);
@@ -618,7 +755,9 @@ class UIManager {
             if (details) {
                 if (details.text) return `<span title="${details.raw}">${details.text}</span>`;
                 if (details.isComment) {
-                    return `<span>${parseFloat(details.val).toFixed(2)} € <i class="fa-solid fa-comment-dots" style="color:var(--info)" title="${details.raw}"></i></span>`;
+                    const iconColor = details.val === 0 ? 'var(--text-muted)' : 'var(--info)';
+                    const valDisplay = details.val === 0 ? '' : `${parseFloat(details.val).toFixed(2)} € `;
+                    return `<span>${valDisplay}<i class="fa-solid fa-comment-dots" style="color:${iconColor}; margin-left:5px;" title="${details.raw}"></i></span>`;
                 }
                 if (details.val === 0) return '<span style="color: var(--text-muted)">-</span>';
                 return `${parseFloat(details.val).toFixed(2)} €`;
@@ -686,6 +825,14 @@ class UIManager {
         this.app.dataManager.saveVisibility(newSettings);
         this.utils.closeModal('settingsModal');
         this.renderTable(this.app.currentData);
+    }
+
+    openExportModal() {
+        this.utils.openModal('exportModal');
+    }
+
+    closeExportModal() {
+        this.utils.closeModal('exportModal');
     }
 
     fillEditForm(member) {
@@ -851,12 +998,89 @@ class App {
         }
     }
 
-    exportData() {
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet(this.dataManager.rawData);
-        XLSX.utils.book_append_sheet(wb, ws, "Inscriptions");
-        const date = new Date().toISOString().slice(0, 10);
-        XLSX.writeFile(wb, `SF_Inscriptions_v2_${date}.xlsx`);
+    openReminder(id) {
+        const member = this.dataManager.members.find(m => m.id === id);
+        if (member) {
+            if (window.reminderManager) {
+                window.reminderManager.openModal(member);
+            } else {
+                console.error("ReminderManager not found");
+                Swal.fire('Erreur', 'Module de rappel introuvable.', 'error');
+            }
+        }
+    }
+
+    processExport() {
+        this.uiManager.closeExportModal();
+        this.uiManager.showLoading();
+
+        setTimeout(() => {
+            try {
+                const useFormattedPhone = document.getElementById('exportFormattedPhone').checked;
+                const useStatus = document.getElementById('exportColStatus').checked;
+                const useBalance = document.getElementById('exportColBalance').checked;
+
+                // Clone raw data to avoid mutating original
+                // We need a deep clone if we modify values, or just map.
+                const exportData = this.dataManager.rawData.map(row => [...row]); // Shallow clone of rows is enough if primitive
+
+                // Headers are usually row 0 ? No, rawData is data only probably? 
+                // Wait, SheetJS typically imports headers as row 0 if using sheet_to_json with header:1
+                // Assuming row 0 is headers.
+                const headers = exportData[0];
+
+                // Add extra headers
+                if (useStatus) headers.push('Statut');
+                if (useBalance) headers.push('Solde Restant');
+
+                // Process Data Rows (start at 1)
+                for (let i = 1; i < exportData.length; i++) {
+                    const row = exportData[i];
+
+                    // Standardize Phones logic
+                    if (useFormattedPhone) {
+                        const C = CONFIG.COLS;
+                        if (row[C.TEL_STUDENT]) row[C.TEL_STUDENT] = this.formatPhoneNumber(row[C.TEL_STUDENT]);
+                        if (row[C.TEL_PARENTS]) row[C.TEL_PARENTS] = this.formatPhoneNumber(row[C.TEL_PARENTS]);
+                    }
+
+                    // Extra Columns logic
+                    // We need to re-calculate member status for this row
+                    // Conveniently, we can map row to member object logic
+                    // But mapRowToMember depends on 'this.dataManager.rawData' potentially? 
+                    // No, it handles row. But verifyPrice and calculateTotalPaid need the specific row logic.
+                    // The App instance has 'this.dataManager.members' which matches the *current* state (edited).
+                    // Best way: Use the 'member' object we already have in memory!
+                    // Problem: dataManager.members might be filtered/sorted? No, it holds all.
+                    // But rawData index match? 'id' maps to index in rawData usually? 
+                    // Let's rely on member ID which matches row index in our simplified model (id = index).
+
+                    const member = this.dataManager.members.find(m => m.id === i); // i corresponds to row index for id
+                    if (member) {
+                        if (useStatus) row.push(member.status);
+                        if (useBalance) row.push(Number(member.remaining).toFixed(2) + ' €');
+                    } else {
+                        // Header row or invalid
+                        if (useStatus) row.push('');
+                        if (useBalance) row.push('');
+                    }
+                }
+
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.aoa_to_sheet(exportData);
+                XLSX.utils.book_append_sheet(wb, ws, "Inscriptions");
+                const date = new Date().toISOString().slice(0, 10);
+                XLSX.writeFile(wb, `SF_Inscriptions_Export_${date}.xlsx`);
+
+                this.uiManager.hideLoading();
+                Swal.fire({ icon: 'success', title: 'Export réussi', toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+
+            } catch (e) {
+                console.error(e);
+                this.uiManager.hideLoading();
+                Swal.fire('Erreur', "L'export a échoué: " + e.message, 'error');
+            }
+        }, 100);
     }
 
     handleInlineEdit(td) {
@@ -936,103 +1160,20 @@ class App {
         });
     }
 
-    handleInlineEdit(td) {
-        const id = parseInt(td.dataset.id);
-        const key = td.dataset.key;
-        const member = this.dataManager.members.find(m => m.id === id);
-        if (!member) return;
 
-        // Current Value
-        // Careful with raw vs formatted. Ideally we edit the raw value or a text representation.
-        // For simplicity, let's use the current text content, OR try to find the raw value if mapped.
-        // Actually, we have the member object. using member[key] might be processed.
-        // Let's look at DataManager.mapRowToMember. 
-        // Some fields like active/hasFiche have different keys than rawData indexes.
-
-        // Let's create an input with the current value
-        let val = member[key];
-
-        // Handle special objects (Smart Money)
-        if (key === 'amountDue' || key === 'paid1' || key === 'paid2') {
-            // For smart money, we might want to edit the Raw string to preserve formulas/comments
-            if (member[key + 'Details']) val = member[key + 'Details'].raw; // Edit the raw input
-        }
-
-        const width = td.offsetWidth;
-
-        td.innerHTML = `<input type="text" class="inline-edit-input" value="${val !== undefined ? val : ''}" style="width:${width}px">`;
-        const input = td.querySelector('input');
-        input.focus();
-
-        // Save on Blur or Enter
-        const save = () => {
-            const newVal = input.value;
-            // Update DataManager
-            // We need to map 'key' back to 'raw column index'
-            const C = CONFIG.COLS;
-            let colIdx = -1;
-
-            // Map keys to CONFIG.COLS
-            // Simplistic mapping based on key name matching CONFIG.COLS keys in UPPERCASE
-            // e.g. 'name' -> C.NAME
-            // 'amountDue' -> C.AMOUNT_DUE
-            // conversion helper:
-            const keyMap = {
-                'name': C.NAME,
-                'courses': C.COURSES,
-                'nbHours': C.NB_HOURS,
-                'reduction': C.REDUCTION,
-                'amountDue': C.AMOUNT_DUE,
-                'paymentType': C.PAYMENT_TYPE,
-                'paid1': C.PAID_1,
-                'date1': C.DATE_1,
-                'paid2': C.PAID_2,
-                'date2': C.DATE_2,
-                'telStudent': C.TEL_STUDENT,
-                'parentsName': C.PARENTS_NAME,
-                'telParents': C.TEL_PARENTS,
-                'mailStudent': C.MAIL_STUDENT,
-                'mailParents': C.MAIL_PARENTS,
-                'address': C.ADDRESS,
-                'cp': C.CP,
-                'city': C.CITY,
-                'dob': C.DOB,
-                'pob': C.POB,
-                'other': C.OTHER,
-                'sex': C.SEX
-            };
-
-            colIdx = keyMap[key];
-
-            if (colIdx !== undefined) {
-                // Update RAW data
-                this.dataManager.rawData[id][colIdx] = newVal;
-
-                // Re-process member to get derived fields updated
-                // We can either re-process ALL (safest) or just this one.
-                // Let's reprocess this one row
-                const newMember = this.dataManager.mapRowToMember(this.dataManager.rawData[id], id);
-                const memIdx = this.dataManager.members.findIndex(m => m.id === id);
-                this.dataManager.members[memIdx] = newMember;
-
-                this.dataManager.saveToStorage();
-                this.uiManager.renderTable(this.dataManager.members);
-                this.uiManager.updateStats(this.dataManager.getStats());
-            } else {
-                // Cancel if no mapping (e.g. virtual columns)
-                this.uiManager.renderTable(this.dataManager.members);
-            }
-        };
-
-        input.addEventListener('blur', save);
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                input.blur(); // Triggers save
-            }
-        });
-    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    window.app = new App();
+    try {
+        window.app = new App();
+        console.log("SF Manager App initialized");
+    } catch (e) {
+        alert("Erreur critique au démarrage : " + e.message);
+        console.error(e);
+    }
 });
+
+window.onerror = function (msg, url, lineNo, columnNo, error) {
+    alert(`Erreur JS: ${msg}\nLigne: ${lineNo}`);
+    return false;
+};

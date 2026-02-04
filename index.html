@@ -310,8 +310,84 @@
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
+    <!-- Reminder Modal -->
+    <div id="reminderModal" class="modal-overlay hidden">
+        <div class="modal-content small-modal">
+            <div class="modal-header">
+                <h2>Envoyer un Rappel 💬</h2>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Style du message</label>
+                    <div class="style-selector">
+                        <button class="style-btn active" onclick="selectStyle(this, 'casual')">Décontracté</button>
+                        <button class="style-btn" onclick="selectStyle(this, 'formal')">Formel</button>
+                        <button class="style-btn" onclick="selectStyle(this, 'urgent')">Urgent</button>
+                        <button class="style-btn" onclick="selectStyle(this, 'fun')">Fun</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Aperçu du message</label>
+                    <textarea id="reminderPreview" class="preview-box" rows="6"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="reminderManager.closeModal()">Annuler</button>
+                <button id="copyReminderBtn" class="btn btn-primary" onclick="window.reminderManager.copyToClipboard()">
+                    <i class="fa-regular fa-copy"></i> Copier
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Options Modal -->
+    <div id="exportModal" class="modal-overlay hidden">
+        <div class="modal-content small-modal">
+            <div class="modal-header">
+                <h2>Options d'Export 📥</h2>
+            </div>
+            <div class="modal-body">
+                <div class="export-section">
+                    <label class="custom-checkbox">
+                        <input type="checkbox" id="exportFormattedPhone" checked>
+                        Standardiser les numéros de téléphone (+32...)
+                    </label>
+                </div>
+
+                <div class="export-section">
+                    <div class="section-title">Colonnes Supplémentaires</div>
+                    <div class="checkbox-stack">
+                        <label class="custom-checkbox">
+                            <input type="checkbox" id="exportColStatus" checked>
+                            Statut (Payé/Non Payé)
+                        </label>
+                        <label class="custom-checkbox">
+                            <input type="checkbox" id="exportColBalance" checked>
+                            Solde Restant (€)
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="window.app.uiManager.closeExportModal()">Annuler</button>
+                <button class="btn btn-primary" onclick="window.app.processExport()">
+                    <i class="fa-solid fa-file-export"></i> Exporter
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Application Logic -->
+    <script src="js/reminder.js"></script>
     <script src="js/app.js"></script>
+    <script>
+        // Helper for style buttons
+        function selectStyle(btn, style) {
+            document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            window.reminderManager.updatePreview(style);
+        }
+    </script>
 </body>
 
 </html>
